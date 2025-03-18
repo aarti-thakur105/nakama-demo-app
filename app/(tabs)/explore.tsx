@@ -1,4 +1,3 @@
-// src/screens/QuizScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -11,7 +10,6 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import NakamaService from './Nakama/NakamaService';
-import { QUESTIONS } from './Nakama/nakamaConfig';
 
 const QuizScreen = () => {
   const navigation = useNavigation();
@@ -19,7 +17,6 @@ const QuizScreen = () => {
   const { matchId, subject, ageGroup } = route.params;
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [questions1, setQuestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [scores, setScores] = useState({
@@ -33,6 +30,7 @@ const QuizScreen = () => {
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState(null);
+  const [bothAnswered, setBothAnswered] = useState(false);
 
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const timerInterval = useRef(null);
@@ -73,19 +71,9 @@ const QuizScreen = () => {
       correctAnswer: 1,
       timeLimit: 30
     }
-  ]
-
-  const currentQuestion = questions[currentQuestionIndex];
+  ];
 
   useEffect(() => {
-    // if (QUESTIONS[subject] && QUESTIONS[subject][ageGroup]) {
-    //   console.log("true")
-    //   setQuestions(QUESTIONS[subject][ageGroup]);
-    // } else {
-    //   console.log("false")
-    //   // Fallback to default questions if specific subject/age not found
-    //   setQuestions(QUESTIONS.math.teen);
-    // }
     // Initialize game
     initializeGame();
 
@@ -96,10 +84,8 @@ const QuizScreen = () => {
     };
   }, []);
 
-
   const initializeGame = async () => {
     try {
-      // Get questions
       // Setup match listeners
       NakamaService.listenForMatchUpdates({
         onAnswerReceived: handleOpponentAnswer,
@@ -110,7 +96,7 @@ const QuizScreen = () => {
 
       setIsLoading(false);
       startTimer();
-      console.log("Questions: ", questions)
+      console.log("Questions: ", questions);
     } catch (error) {
       console.error('Error initializing game:', error);
       Alert.alert('Error', 'Failed to initialize game. Please try again.');
@@ -135,7 +121,6 @@ const QuizScreen = () => {
     timerInterval.current = setInterval(() => {
       setTimeRemaining(prevTime => {
         if (prevTime <= 1) {
-          // showQuestionResult()
           clearInterval(timerInterval.current);
           handleTimeUp();
           return 0;
@@ -152,32 +137,63 @@ const QuizScreen = () => {
     // Check if the question exists
     if (!questionAtCurrentIndex) {
       console.error("Current question is undefined in handleTimeUp", { currentQuestionIndex, questionsLength: questions.length });
+      // If we're at the end, just show game over
+      if (currentQuestionIndex >= questions.length) {
+        endGame();
+      }
       return;
     }
     
-    const questionId = questionAtCurrentIndex.id;
+    // If answer was not selected, treat as incorrect
+    if (selectedAnswer === null) {
+      const questionId = questionAtCurrentIndex.id;
+      setPlayerAnswers(prev => ({ ...prev, [questionId]: -1 })); // -1 indicates no answer
+      
+      // Send a timeout response to opponent
+      NakamaService.sendAnswer(
+        questionId,
+        -1,  // -1 indicates no answer
+        30,  // Full time elapsed
+        false // Not correct
+      );
+    }
+    
+    // Show result after timer is up
     showQuestionResult();
-    // if (playerAnswers[questionId] !== undefined && opponentAnswers[questionId] !== undefined) {
-    //   showQuestionResult();
-    // } else if (playerAnswers[questionId] !== undefined) {
-    //   console.log("Opponent has not answered yet.");
-    //   showQuestionResult();
-    // } else if (opponentAnswers[questionId] !== undefined) {
-    //   console.log("Player has not answered yet.");
-    //   showQuestionResult();
-    // }
   };
 
-  
   const handleOpponentAnswer = (userId, data) => {
-    console.log("Opponent data recived: ", data)
-    let updatedAnswersOfOpponents;
+    console.log("Opponent data received: ", data);
     setOpponentAnswers(prev => {
-      updatedAnswersOfOpponents = { ...prev, [data.questionId]: data.answerId };
-      return updatedAnswersOfOpponents;
+      const updatedAnswers = { ...prev, [data.questionId]: data.answerId };
+      return updatedAnswers;
     });
+    
+    // Update opponent score if their answer was correct
+    if (data.isCorrect) {
+      setScores(prev => ({
+        ...prev,
+        opponent: prev.opponent + 1
+      }));
+    }
+    
     // Check if both players have answered
-    // checkBothAnswered(data.questionId);
+    checkBothAnswered();
+  };
+  
+  const checkBothAnswered = () => {
+    const currentQuestion = questions[currentQuestionIndex];
+    if (!currentQuestion) return;
+    
+    const playerHasAnswered = playerAnswers[currentQuestion.id] !== undefined;
+    const opponentHasAnswered = opponentAnswers[currentQuestion.id] !== undefined;
+    
+    if (playerHasAnswered && opponentHasAnswered) {
+      setBothAnswered(true);
+      
+      // Continue timer until it expires naturally
+      // Do not show result yet until timer completes
+    }
   };
 
   const handleNextQuestion = (data) => {
@@ -185,65 +201,68 @@ const QuizScreen = () => {
     setSelectedAnswer(null);
     setWaitingForOpponent(false);
     setShowResult(false);
+    setBothAnswered(false);
     startTimer();
   };
 
   const handleGameResult = (data) => {
-    console.log("Game result received: ", data)
+    console.log("Game result received: ", data);
+    clearInterval(timerInterval.current);
     setGameOver(true);
-    setWinner(data.winner);
-
-    // Update final scores
+    setWinner(data.winner === 'player' ? 'opponent' : 
+              data.winner === 'opponent' ? 'player' : 'tie');
+  
+    // Update final scores - swap player and opponent scores
     setScores({
-      player: data.playerScore,
-      opponent: data.opponentScore
+      player: data.opponentScore,  // This was the issue
+      opponent: data.playerScore   // This was the issue
     });
   };
 
   const handlePlayerLeft = (players) => {
+    clearInterval(timerInterval.current);
     Alert.alert('Opponent left', 'Your opponent has left the game.');
     setGameOver(true);
     setWinner('player'); // Default win if opponent leaves
   };
 
   const submitAnswer = async (answerId) => {
-    if (waitingForOpponent || showResult) return;
-
-    // clearInterval(timerInterval.current);
+    if (selectedAnswer !== null || waitingForOpponent || showResult) return;
 
     const currentQuestion = questions[currentQuestionIndex];
-    let updatedAnswersOfPlayer;
+    
     // Store player's answer
     setSelectedAnswer(answerId);
     setPlayerAnswers(prev => {
-      updatedAnswersOfPlayer = { ...prev, [currentQuestion.id]: answerId };
-      return updatedAnswersOfPlayer;
+      const updatedAnswers = { ...prev, [currentQuestion.id]: answerId };
+      return updatedAnswers;
     });
+    
+    // Check if answer is correct
+    const isCorrect = answerId === currentQuestion.correctAnswer;
+    
     // Update score if correct
-    if (answerId === currentQuestion.correctAnswer) {
+    if (isCorrect) {
       setScores(prev => ({
         ...prev,
         player: prev.player + 1
       }));
     }
 
-    // Send answer to opponent
+    // Send answer to opponent with correct/incorrect status
     await NakamaService.sendAnswer(
       currentQuestion.id,
       answerId,
-      30 - timeRemaining
+      30 - timeRemaining,
+      isCorrect
     );
+    
     setWaitingForOpponent(true);
-
+    
     // Check if opponent has already answered
-    // checkBothAnswered(currentQuestion.id);
-  };
-
-
-  const checkBothAnswered = (questionId) => {
-    if (playerAnswers[questionId] !== undefined && opponentAnswers[questionId] !== undefined) {
-      showQuestionResult();
-    }
+    checkBothAnswered();
+    
+    // Do NOT show result yet - wait for the timer to complete
   };
 
   const showQuestionResult = () => {
@@ -261,22 +280,42 @@ const QuizScreen = () => {
       setCurrentQuestionIndex(prevIndex => prevIndex + 1);
       setSelectedAnswer(null);
       setShowResult(false);
+      setBothAnswered(false);
       startTimer();
     } else {
-      // Game over
+      // Game over - call endGame to transition to results screen
       endGame();
     }
   };
 
-  const endGame = () => {
+  const endGame = async () => {
+    clearInterval(timerInterval.current);
+    
+    // Determine winner based on scores
+    let gameWinner;
+    if (scores.player > scores.opponent) {
+      gameWinner = 'player';
+    } else if (scores.player < scores.opponent) {
+      gameWinner = 'opponent';
+    } else {
+      gameWinner = 'tie';
+    }
+    
+    // Set these states
+    setWinner(gameWinner);
     setGameOver(true);
-
-    // Determine winner
-    const winner = scores.player > scores.opponent ? 'player' :
-      scores.player < scores.opponent ? 'opponent' : 'tie';
-    setWinner(winner);
+  
+    // Send game result to Nakama
+    try {
+      await NakamaService.sendGameResult({
+        winner: gameWinner,
+        playerScore: scores.player,
+        opponentScore: scores.opponent
+      });
+    } catch (error) {
+      console.error('Error sending game result:', error);
+    }
   };
-
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -286,6 +325,7 @@ const QuizScreen = () => {
     );
   }
 
+  // Show game over screen if gameOver is true
   if (gameOver) {
     return (
       <View style={styles.container}>
@@ -298,11 +338,12 @@ const QuizScreen = () => {
         </View>
 
         <Text style={[styles.winnerText,
-        winner === 'player' ? styles.winnerTextWin :
+          winner === 'player' ? styles.winnerTextWin :
           winner === 'opponent' ? styles.winnerTextLose :
-            styles.winnerTextTie]}>
+          styles.winnerTextTie]}>
           {winner === 'player' ? 'You Won!' :
-            winner === 'opponent' ? 'You Lost!' : 'It\'s a Tie!'}
+           winner === 'opponent' ? 'You Lost!' : 
+           'It\'s a Tie!'}
         </Text>
 
         <TouchableOpacity
@@ -315,8 +356,22 @@ const QuizScreen = () => {
     );
   }
 
-  // const currentQuestion = questions[currentQuestionIndex];
+  // Fallback for index out of bounds
+  if (currentQuestionIndex >= questions.length) {
+    setTimeout(() => endGame(), 0);
+    
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4287f5" />
+        <Text style={styles.loadingText}>Calculating results...</Text>
+      </View>
+    );
+  }
+
+  // Get the current question
+  const currentQuestion = questions[currentQuestionIndex];
   console.log("Current question:", currentQuestion);
+  
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -381,10 +436,17 @@ const QuizScreen = () => {
         ))}
       </View>
 
-      {waitingForOpponent && (
+      {waitingForOpponent && !bothAnswered && (
         <View style={styles.waitingContainer}>
           <ActivityIndicator size="small" color="#4287f5" />
           <Text style={styles.waitingText}>Waiting for opponent...</Text>
+        </View>
+      )}
+
+      {bothAnswered && !showResult && (
+        <View style={styles.waitingContainer}>
+          <ActivityIndicator size="small" color="#4287f5" />
+          <Text style={styles.waitingText}>Both answered. Waiting for timer...</Text>
         </View>
       )}
 
@@ -578,7 +640,7 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-  },
+  }
 });
 
 export default QuizScreen;
