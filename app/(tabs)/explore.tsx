@@ -1,11 +1,11 @@
 // src/screens/QuizScreen.js
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Alert, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
   ActivityIndicator,
   Animated
 } from 'react-native';
@@ -17,9 +17,9 @@ const QuizScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { matchId, subject, ageGroup } = route.params;
-  
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [questions, setQuestions] = useState([]);
+  const [questions1, setQuestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [scores, setScores] = useState({
@@ -33,14 +33,62 @@ const QuizScreen = () => {
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState(null);
-  
+
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const timerInterval = useRef(null);
 
+  const questions = [
+    {
+      id: 1,
+      question: "What is the value of π (pi) to two decimal places?",
+      options: ["3.10", "3.14", "3.16", "3.18"],
+      correctAnswer: 1, // Index of correct answer (0-based)
+      timeLimit: 30 // seconds
+    },
+    {
+      id: 2,
+      question: "What is the square root of 144?",
+      options: ["10", "12", "14", "16"],
+      correctAnswer: 1,
+      timeLimit: 30
+    },
+    {
+      id: 3,
+      question: "If x + 2y = 10 and x - y = 1, what is the value of y?",
+      options: ["2", "3", "4", "5"],
+      correctAnswer: 1,
+      timeLimit: 30
+    },
+    {
+      id: 4,
+      question: "What is the sum of the angles in a triangle?",
+      options: ["90°", "180°", "270°", "360°"],
+      correctAnswer: 1,
+      timeLimit: 30
+    },
+    {
+      id: 5,
+      question: "What is 25% of 80?",
+      options: ["15", "20", "25", "30"],
+      correctAnswer: 1,
+      timeLimit: 30
+    }
+  ]
+
+  const currentQuestion = questions[currentQuestionIndex];
+
   useEffect(() => {
+    // if (QUESTIONS[subject] && QUESTIONS[subject][ageGroup]) {
+    //   console.log("true")
+    //   setQuestions(QUESTIONS[subject][ageGroup]);
+    // } else {
+    //   console.log("false")
+    //   // Fallback to default questions if specific subject/age not found
+    //   setQuestions(QUESTIONS.math.teen);
+    // }
     // Initialize game
     initializeGame();
-    
+
     return () => {
       // Clean up
       clearInterval(timerInterval.current);
@@ -48,16 +96,10 @@ const QuizScreen = () => {
     };
   }, []);
 
+
   const initializeGame = async () => {
     try {
       // Get questions
-      if (QUESTIONS[subject] && QUESTIONS[subject][ageGroup]) {
-        setQuestions(QUESTIONS[subject][ageGroup]);
-      } else {
-        // Fallback to default questions if specific subject/age not found
-        setQuestions(QUESTIONS.math.teen);
-      }
-      
       // Setup match listeners
       NakamaService.listenForMatchUpdates({
         onAnswerReceived: handleOpponentAnswer,
@@ -65,9 +107,10 @@ const QuizScreen = () => {
         onGameResult: handleGameResult,
         onPlayerLeft: handlePlayerLeft
       });
-      
+
       setIsLoading(false);
       startTimer();
+      console.log("Questions: ", questions)
     } catch (error) {
       console.error('Error initializing game:', error);
       Alert.alert('Error', 'Failed to initialize game. Please try again.');
@@ -79,19 +122,20 @@ const QuizScreen = () => {
     // Reset timer
     setTimeRemaining(30);
     timerAnimation.setValue(1);
-    
+
     // Animate timer
     Animated.timing(timerAnimation, {
       toValue: 0,
       duration: 30000,
       useNativeDriver: false
     }).start();
-    
+
     // Start countdown
     clearInterval(timerInterval.current);
     timerInterval.current = setInterval(() => {
       setTimeRemaining(prevTime => {
         if (prevTime <= 1) {
+          // showQuestionResult()
           clearInterval(timerInterval.current);
           handleTimeUp();
           return 0;
@@ -102,27 +146,41 @@ const QuizScreen = () => {
   };
 
   const handleTimeUp = () => {
-    // If answer not selected, submit timeout
-    if (selectedAnswer === null) {
-      submitAnswer(-1);
+    // Get the current question directly from the questions array using currentQuestionIndex
+    const questionAtCurrentIndex = questions[currentQuestionIndex];
+    
+    // Check if the question exists
+    if (!questionAtCurrentIndex) {
+      console.error("Current question is undefined in handleTimeUp", { currentQuestionIndex, questionsLength: questions.length });
+      return;
     }
+    
+    const questionId = questionAtCurrentIndex.id;
+    showQuestionResult();
+    // if (playerAnswers[questionId] !== undefined && opponentAnswers[questionId] !== undefined) {
+    //   showQuestionResult();
+    // } else if (playerAnswers[questionId] !== undefined) {
+    //   console.log("Opponent has not answered yet.");
+    //   showQuestionResult();
+    // } else if (opponentAnswers[questionId] !== undefined) {
+    //   console.log("Player has not answered yet.");
+    //   showQuestionResult();
+    // }
   };
 
+  
   const handleOpponentAnswer = (userId, data) => {
-    console.log('Opponent answer received:', data);
-    
-    // Store opponent's answer
-    setOpponentAnswers(prev => ({
-      ...prev,
-      [data.questionId]: data.answerId
-    }));
-    
+    console.log("Opponent data recived: ", data)
+    let updatedAnswersOfOpponents;
+    setOpponentAnswers(prev => {
+      updatedAnswersOfOpponents = { ...prev, [data.questionId]: data.answerId };
+      return updatedAnswersOfOpponents;
+    });
     // Check if both players have answered
-    checkBothAnswered(data.questionId);
+    // checkBothAnswered(data.questionId);
   };
 
   const handleNextQuestion = (data) => {
-    console.log('Next question:', data);
     setCurrentQuestionIndex(data.questionIndex);
     setSelectedAnswer(null);
     setWaitingForOpponent(false);
@@ -131,10 +189,10 @@ const QuizScreen = () => {
   };
 
   const handleGameResult = (data) => {
-    console.log('Game result:', data);
+    console.log("Game result received: ", data)
     setGameOver(true);
     setWinner(data.winner);
-    
+
     // Update final scores
     setScores({
       player: data.playerScore,
@@ -150,18 +208,17 @@ const QuizScreen = () => {
 
   const submitAnswer = async (answerId) => {
     if (waitingForOpponent || showResult) return;
-    
-    clearInterval(timerInterval.current);
-    
+
+    // clearInterval(timerInterval.current);
+
     const currentQuestion = questions[currentQuestionIndex];
-    
+    let updatedAnswersOfPlayer;
     // Store player's answer
     setSelectedAnswer(answerId);
-    setPlayerAnswers(prev => ({
-      ...prev,
-      [currentQuestion.id]: answerId
-    }));
-    
+    setPlayerAnswers(prev => {
+      updatedAnswersOfPlayer = { ...prev, [currentQuestion.id]: answerId };
+      return updatedAnswersOfPlayer;
+    });
     // Update score if correct
     if (answerId === currentQuestion.correctAnswer) {
       setScores(prev => ({
@@ -169,19 +226,19 @@ const QuizScreen = () => {
         player: prev.player + 1
       }));
     }
-    
+
     // Send answer to opponent
     await NakamaService.sendAnswer(
       currentQuestion.id,
       answerId,
       30 - timeRemaining
     );
-    
     setWaitingForOpponent(true);
-    
+
     // Check if opponent has already answered
-    checkBothAnswered(currentQuestion.id);
+    // checkBothAnswered(currentQuestion.id);
   };
+
 
   const checkBothAnswered = (questionId) => {
     if (playerAnswers[questionId] !== undefined && opponentAnswers[questionId] !== undefined) {
@@ -192,7 +249,7 @@ const QuizScreen = () => {
   const showQuestionResult = () => {
     setWaitingForOpponent(false);
     setShowResult(true);
-    
+
     // Wait 3 seconds before moving to next question
     setTimeout(() => {
       moveToNextQuestion();
@@ -201,7 +258,6 @@ const QuizScreen = () => {
 
   const moveToNextQuestion = () => {
     if (currentQuestionIndex < questions.length - 1) {
-      // Move to next question
       setCurrentQuestionIndex(prevIndex => prevIndex + 1);
       setSelectedAnswer(null);
       setShowResult(false);
@@ -214,10 +270,10 @@ const QuizScreen = () => {
 
   const endGame = () => {
     setGameOver(true);
-    
+
     // Determine winner
-    const winner = scores.player > scores.opponent ? 'player' : 
-                   scores.player < scores.opponent ? 'opponent' : 'tie';
+    const winner = scores.player > scores.opponent ? 'player' :
+      scores.player < scores.opponent ? 'opponent' : 'tie';
     setWinner(winner);
   };
 
@@ -234,22 +290,22 @@ const QuizScreen = () => {
     return (
       <View style={styles.container}>
         <Text style={styles.gameOverTitle}>Game Over!</Text>
-        
+
         <View style={styles.scoreContainer}>
           <Text style={styles.scoreText}>Final Score</Text>
           <Text style={styles.scoreValue}>You: {scores.player}</Text>
           <Text style={styles.scoreValue}>Opponent: {scores.opponent}</Text>
         </View>
-        
-        <Text style={[styles.winnerText, 
-          winner === 'player' ? styles.winnerTextWin : 
-          winner === 'opponent' ? styles.winnerTextLose : 
-          styles.winnerTextTie]}>
-          {winner === 'player' ? 'You Won!' : 
-           winner === 'opponent' ? 'You Lost!' : 'It\'s a Tie!'}
+
+        <Text style={[styles.winnerText,
+        winner === 'player' ? styles.winnerTextWin :
+          winner === 'opponent' ? styles.winnerTextLose :
+            styles.winnerTextTie]}>
+          {winner === 'player' ? 'You Won!' :
+            winner === 'opponent' ? 'You Lost!' : 'It\'s a Tie!'}
         </Text>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={styles.playAgainButton}
           onPress={() => navigation.navigate('Home')}
         >
@@ -259,8 +315,8 @@ const QuizScreen = () => {
     );
   }
 
-  const currentQuestion = questions[currentQuestionIndex];
-
+  // const currentQuestion = questions[currentQuestionIndex];
+  console.log("Current question:", currentQuestion);
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -269,15 +325,15 @@ const QuizScreen = () => {
             Question {currentQuestionIndex + 1}/{questions.length}
           </Text>
         </View>
-        
+
         <View style={styles.scoreBoard}>
           <Text style={styles.scoreText}>You: {scores.player}</Text>
           <Text style={styles.scoreText}>Opponent: {scores.opponent}</Text>
         </View>
       </View>
-      
+
       <View style={styles.timerContainer}>
-        <Animated.View 
+        <Animated.View
           style={[
             styles.timerBar,
             {
@@ -294,11 +350,11 @@ const QuizScreen = () => {
         />
         <Text style={styles.timerText}>{timeRemaining}s</Text>
       </View>
-      
+
       <View style={styles.questionContainer}>
         <Text style={styles.questionText}>{currentQuestion.question}</Text>
       </View>
-      
+
       <View style={styles.optionsContainer}>
         {currentQuestion.options.map((option, index) => (
           <TouchableOpacity
@@ -307,7 +363,7 @@ const QuizScreen = () => {
               styles.optionButton,
               selectedAnswer === index && styles.selectedOption,
               showResult && index === currentQuestion.correctAnswer && styles.correctOption,
-              showResult && selectedAnswer === index && 
+              showResult && selectedAnswer === index &&
               selectedAnswer !== currentQuestion.correctAnswer && styles.incorrectOption
             ]}
             onPress={() => submitAnswer(index)}
@@ -316,7 +372,7 @@ const QuizScreen = () => {
             <Text style={[
               styles.optionText,
               showResult && index === currentQuestion.correctAnswer && styles.correctOptionText,
-              showResult && selectedAnswer === index && 
+              showResult && selectedAnswer === index &&
               selectedAnswer !== currentQuestion.correctAnswer && styles.incorrectOptionText
             ]}>
               {option}
@@ -324,18 +380,18 @@ const QuizScreen = () => {
           </TouchableOpacity>
         ))}
       </View>
-      
+
       {waitingForOpponent && (
         <View style={styles.waitingContainer}>
           <ActivityIndicator size="small" color="#4287f5" />
           <Text style={styles.waitingText}>Waiting for opponent...</Text>
         </View>
       )}
-      
+
       {showResult && (
         <View style={styles.resultContainer}>
           <Text style={styles.resultText}>
-            {selectedAnswer === currentQuestion.correctAnswer ? 
+            {selectedAnswer === currentQuestion.correctAnswer ?
               '✓ Correct!' : '✗ Incorrect!'}
           </Text>
         </View>

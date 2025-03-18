@@ -18,6 +18,7 @@ class NakamaService {
     this.session = null;
     this.socket = null;
     this.matchId = null;
+    this.token = null;
     this.userId = null;
     this.opponentId = null;
   }
@@ -37,15 +38,12 @@ class NakamaService {
         localStorage.setItem("nakamaDeviceId", deviceId);
       }
 
-      console.log("Using device ID:", deviceId);
       this.session = await this.client.authenticateDevice(deviceId, true);
       this.userId = this.session.user_id;
-      console.log("Authenticated with Nakama:", this.userId);
 
       // Create a socket connection
       this.socket = this.client.createSocket();
       await this.socket.connect(this.session, true);
-      console.log("Socket connected");
 
       return true;
     } catch (error) {
@@ -53,19 +51,14 @@ class NakamaService {
       return false;
     }
   }
-  
+
   async findMatch(subject, ageGroup) {
     try {
       if (!this.session || !this.socket) {
         await this.authenticate();
       }
-  
-      console.log(`Finding match for subject: ${subject}, age group: ${ageGroup}`);
-      
-      const query =""
-      console.log("Query:", query);
-      console.log("Socket: ", this.socket);
-      console.log("client: ", this.client)
+
+      const query = "";
       const minSize = 2;
       const maxSize = 2;
       const stringProperties = {
@@ -77,52 +70,47 @@ class NakamaService {
         query,
         minSize,
         maxSize,
-        stringProperties,
+        stringProperties
       );
-  
-      console.log("Added to matchmaking with ticket:", matchmakerTicket.ticket);
-      
+
       // Wait for a match
       return new Promise((resolve, reject) => {
         // Listen for matchmaker matched event
         this.socket.onmatchmakermatched = (matched) => {
-          console.log("Match found:", matched);
-          
           // In Nakama, the match_id comes directly from the matched object
-          this.matchId = matched.token;
-          console.log("Match ID:", this.matchId);
-  
-          if (!this.matchId) {
+          this.token = matched.token;
+
+          if (!this.token) {
             console.error("No match ID received");
             reject(new Error("No match ID received"));
             return;
           }
-  
+
           // Join the match with the correct parameter
-          this.socket.joinMatch(null,this.matchId)
-            .then(match => {
-              console.log("Joined match:", match);
-              
+          this.socket
+            .joinMatch(null, this.token)
+            .then((match) => {
+              this.matchId = match.match_id;
+
               if (!match.presences || match.presences.length === 0) {
                 console.warn("No presences in match data");
                 resolve(match); // Continue anyway
                 return;
               }
-  
+
               // Find opponent ID
               this.opponentId = match.presences.find(
-                presence => presence.user_id !== this.userId
+                (presence) => presence.user_id !== this.userId
               )?.user_id;
-  
-              console.log("Opponent ID:", this.opponentId);
+
               resolve(match);
             })
-            .catch(error => {
+            .catch((error) => {
               console.error("Error joining match:", error);
               reject(error);
             });
         };
-  
+
         // Set a reasonable timeout for matchmaking
         setTimeout(() => {
           if (!this.matchId) {
@@ -135,88 +123,6 @@ class NakamaService {
       throw error;
     }
   }
-
-  // async findMatch(subject, ageGroup) {
-  //   try {
-  //     if (!this.session || !this.socket) {
-  //       await this.authenticate();
-  //     }
-
-  //     console.log(
-  //       `Finding match for subject: ${subject}, age group: ${ageGroup}`
-  //     );
-
-  //     // Add player to matchmaking pool
-  //     // const query = `+properties.subject:${subject} +properties.ageGroup:${ageGroup}`;
-  //     const query =""
-  //     console.log("Query:", query);
-  //     console.log("Socket: ", this.socket);
-  //     console.log("client: ", this.client)
-  //     const minSize = 2;
-  //     const maxSize = 2;
-  //     const stringProperties = {
-  //       subject: subject,
-  //     };
-  //     // const numericProperties = {};
-  //     const matchmakerTicket = await this.socket.addMatchmaker(
-  //       query,
-  //       minSize,
-  //       maxSize,
-  //       stringProperties,
-  //     );
-
-  //     console.log("Added to matchmaking with ticket:", matchmakerTicket.ticket);
-
-  //     this.socket.receivedMatchmakerMatched = (matchmakerMatched) => {
-  //       console.log("Match found using receivedMatchmakerMatched!", matchmakerMatched);
-        
-  //       // Join the match
-  //       const matchId = matchmakerMatched.match_id;
-  //       this.socket.send({ match_join: { match_id: matchId } });
-  //     };
-      
-  //     // Wait for a match
-  //     return new Promise((resolve, reject) => {
-  //       // Listen for matchmaker matched event
-  //       this.socket.onmatchmakermatched = (matched) => {
-  //         console.log("Match found:", matched);
-  //         this.matchId = matched.token;
-  //         const matchId1 = null;
-  //         console.log("Token: ", this.matchId)
-
-  //         // Join the matc
-
-  //         this.socket
-  //           .joinMatch(matchId1, this.matchId)
-  //           .then((match) => {
-  //             console.log("Joined match:", match);
-
-  //             // Find opponent ID
-  //             this.opponentId = match.presences.find(
-  //               (presence) => presence.user_id !== this.userId
-  //             )?.user_id;
-
-  //             console.log("Opponent ID:", this.opponentId);
-  //             resolve(match);
-  //           })
-  //           .catch((error) => {
-  //             console.error("Error joining match:", error);
-  //             reject(error);
-  //           });
-  //       };
-
-  //       // Set a timeout for matchmaking
-  //       // setTimeout(() => {
-  //       //   if (!this.matchId) {
-  //       //     reject(new Error("Matchmaking timeout"));
-  //       //   }
-  //       // }, 53000000000); 
-  //     });
-  //   } catch (error) {
-  //     console.error("Matchmaking error:", error);
-  //     throw error;
-  //   }
-  // }
 
   async sendAnswer(questionId, answerId, timeSpent) {
     try {
@@ -232,7 +138,7 @@ class NakamaService {
 
       await this.socket.sendMatchState(
         this.matchId,
-        /* opCode= */ 1, // Op code for answers
+        1, // Op code for answers
         JSON.stringify(data)
       );
 
@@ -252,8 +158,7 @@ class NakamaService {
     this.socket.onmatchdata = (matchData) => {
       if (matchData.match_id !== this.matchId) return;
 
-      const data = JSON.parse(matchData.data);
-      console.log("Match data received:", data);
+      const data = JSON.parse(new TextDecoder().decode(matchData.data));
 
       switch (matchData.op_code) {
         case 1: // Answer received
@@ -278,14 +183,12 @@ class NakamaService {
       if (presenceEvent.match_id !== this.matchId) return;
 
       if (presenceEvent.leaves && presenceEvent.leaves.length > 0) {
-        console.log("Player left the match:", presenceEvent.leaves);
         if (callbacks.onPlayerLeft) {
           callbacks.onPlayerLeft(presenceEvent.leaves);
         }
       }
 
       if (presenceEvent.joins && presenceEvent.joins.length > 0) {
-        console.log("Player joined the match:", presenceEvent.joins);
         if (callbacks.onPlayerJoined) {
           callbacks.onPlayerJoined(presenceEvent.joins);
         }
@@ -314,6 +217,25 @@ class NakamaService {
       this.socket = null;
     }
     this.session = null;
+  }
+
+  async forceNextQuestion(nextQuestionIndex) {
+    if (!this.matchId) {
+      console.error("No active match");
+      return false;
+    }
+    try {
+      console.log("OP code: ", op_code)
+      await this.socket.sendMatchState({
+        matchId: this.matchId,
+        opCode: op_code.NEXT_QUESTION,
+        data: {
+          questionIndex: nextQuestionIndex,
+        },
+      });
+    } catch (error) {
+      console.error("Error forcing next question:", error);
+    }
   }
 }
 
