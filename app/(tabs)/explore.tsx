@@ -36,6 +36,7 @@ const QuizScreen = () => {
 
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const timerInterval = useRef(null);
+  const [isHost1, setIsHost1] = useState(false);
 
   const questions = [
     {
@@ -76,6 +77,13 @@ const QuizScreen = () => {
   ]
 
   const currentQuestion = questions[currentQuestionIndex];
+  console.log("Current Index: ", currentQuestionIndex);
+  const isHost = NakamaService.isHost;
+  const questionIndexRef = useRef(0); // Store the latest index
+
+  useEffect(() => {
+    questionIndexRef.current = currentQuestionIndex;
+  }, [currentQuestionIndex]);
 
   useEffect(() => {
     // if (QUESTIONS[subject] && QUESTIONS[subject][ageGroup]) {
@@ -99,22 +107,32 @@ const QuizScreen = () => {
 
   const initializeGame = async () => {
     try {
-      // Get questions
+      console.log("Game initialized as:", isHost ? "Host" : "Client");
+
       // Setup match listeners
       NakamaService.listenForMatchUpdates({
         onAnswerReceived: handleOpponentAnswer,
         onNextQuestion: handleNextQuestion,
         onGameResult: handleGameResult,
-        onPlayerLeft: handlePlayerLeft
+        onPlayerLeft: handlePlayerLeft,
+        onHostChanged: handleHostChanged
       });
 
       setIsLoading(false);
       startTimer();
-      console.log("Questions: ", questions)
     } catch (error) {
-      console.error('Error initializing game:', error);
       Alert.alert('Error', 'Failed to initialize game. Please try again.');
       navigation.goBack();
+    }
+  };
+
+  const handleHostChanged = (newIsHost) => {
+    setIsHost1(newIsHost);
+
+    // If we just became the host and we're in the middle of a question, ensure the game continues
+    if (newIsHost && waitingForOpponent && !showResult) {
+      // Force progress to the next question if we're stuck
+      showQuestionResult();
     }
   };
 
@@ -135,7 +153,6 @@ const QuizScreen = () => {
     timerInterval.current = setInterval(() => {
       setTimeRemaining(prevTime => {
         if (prevTime <= 1) {
-          // showQuestionResult()
           clearInterval(timerInterval.current);
           handleTimeUp();
           return 0;
@@ -146,31 +163,18 @@ const QuizScreen = () => {
   };
 
   const handleTimeUp = () => {
-    // Get the current question directly from the questions array using currentQuestionIndex
     const questionAtCurrentIndex = questions[currentQuestionIndex];
-    
-    // Check if the question exists
+
     if (!questionAtCurrentIndex) {
-      console.error("Current question is undefined in handleTimeUp", { currentQuestionIndex, questionsLength: questions.length });
+      console.error("Current question is undefined in handleTimeUp");
       return;
     }
-    
-    const questionId = questionAtCurrentIndex.id;
+
     showQuestionResult();
-    // if (playerAnswers[questionId] !== undefined && opponentAnswers[questionId] !== undefined) {
-    //   showQuestionResult();
-    // } else if (playerAnswers[questionId] !== undefined) {
-    //   console.log("Opponent has not answered yet.");
-    //   showQuestionResult();
-    // } else if (opponentAnswers[questionId] !== undefined) {
-    //   console.log("Player has not answered yet.");
-    //   showQuestionResult();
-    // }
   };
 
-  
+
   const handleOpponentAnswer = (userId, data) => {
-    console.log("Opponent data recived: ", data)
     let updatedAnswersOfOpponents;
     setOpponentAnswers(prev => {
       updatedAnswersOfOpponents = { ...prev, [data.questionId]: data.answerId };
@@ -180,16 +184,36 @@ const QuizScreen = () => {
     // checkBothAnswered(data.questionId);
   };
 
+  // const handleNextQuestion = (data) => {
+  //   console.log("Next question data: ", data)
+  //   setCurrentQuestionIndex(data.questionIndex);
+  //   setSelectedAnswer(null);
+  //   setWaitingForOpponent(false);
+  //   setShowResult(false);
+  //   startTimer();
+  // };
+
   const handleNextQuestion = (data) => {
+    console.log("Next question data: ", data)
     setCurrentQuestionIndex(data.questionIndex);
     setSelectedAnswer(null);
     setWaitingForOpponent(false);
     setShowResult(false);
     startTimer();
-  };
 
+    setQuestions((prev) => {
+      const updatedQuestions = [...prev];
+      updatedQuestions[data.questionIndex] = {
+        question: data.question,
+        options: data.options,
+        correctAnswer: data.correctAnswer,
+        timeLimit: data.timeLimit,
+      };
+      return updatedQuestions;
+    });
+  
+  };
   const handleGameResult = (data) => {
-    console.log("Game result received: ", data)
     setGameOver(true);
     setWinner(data.winner);
 
@@ -249,24 +273,87 @@ const QuizScreen = () => {
   const showQuestionResult = () => {
     setWaitingForOpponent(false);
     setShowResult(true);
-
-    // Wait 3 seconds before moving to next question
-    setTimeout(() => {
-      moveToNextQuestion();
-    }, 3000);
-  };
-
-  const moveToNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prevIndex => prevIndex + 1);
-      setSelectedAnswer(null);
-      setShowResult(false);
-      startTimer();
-    } else {
-      // Game over
-      endGame();
+    // Only the host should move to the next question
+    if (isHost) {
+      setTimeout(() => {
+        moveToNextQuestion();
+      }, 3000);
     }
   };
+
+  // const showQuestionResult = () => {
+  //   setWaitingForOpponent(false);
+  //   setShowResult(true);
+
+  //   // Only have one player (e.g., the host) progress to the next question
+  //   // This avoids race conditions with both players sending "next question" events
+  //   if (isHost) { // You need to add a way to determine who's the host
+  //     setTimeout(() => {
+  //       moveToNextQuestion();
+  //     }, 3000);
+  //   }
+  // };
+
+  // const moveToNextQuestion = () => {
+  //   console.log("moveToNextQuestion called");
+  //   if (currentQuestionIndex < questions.length - 1) {
+  //     const nextIndex = currentQuestionIndex + 1;
+
+  //     // Send the next question event to all players
+  //     NakamaService.forceNextQuestion(nextIndex);
+
+  //     // Note: You shouldn't update local state here if you want server-driven updates
+  //     // The state should update when handleNextQuestion is called
+  //   } else {
+  //     // Game over
+  //     endGame();
+  //   }
+  // };
+
+ const moveToNextQuestion = () => {
+  console.log("Moving to next question. Stored index:", questionIndexRef.current);
+
+  if (!isHost) {
+    return;
+  }
+
+  if (questionIndexRef.current < questions.length - 1) {
+    const nextIndex = questionIndexRef.current + 1;
+    console.log("Sending next question index:", nextIndex);
+    const nextQuestion = questions[nextIndex];
+
+    // Send the updated question index to all players
+    NakamaService.forceNextQuestion({
+      questionIndex: nextIndex,
+      question: nextQuestion.question,
+      options: nextQuestion.options,
+      correctAnswer: nextQuestion.correctAnswer,
+      timeLimit: nextQuestion.timeLimit,
+    });
+
+    // Update both state and ref
+    setCurrentQuestionIndex(prevIndex => {
+      const newIndex = prevIndex + 1;
+      questionIndexRef.current = newIndex; // Update ref with latest value
+      return newIndex;
+    });
+
+    setSelectedAnswer(null);
+    setShowResult(false);
+    startTimer();
+  } else {
+    console.log("End of questions. Ending game.");
+    endGame();
+  }
+};
+  // const endGame = () => {
+  //   setGameOver(true);
+
+  //   // Determine winner
+  //   const winner = scores.player > scores.opponent ? 'player' :
+  //     scores.player < scores.opponent ? 'opponent' : 'tie';
+  //   setWinner(winner);
+  // };
 
   const endGame = () => {
     setGameOver(true);
@@ -275,6 +362,15 @@ const QuizScreen = () => {
     const winner = scores.player > scores.opponent ? 'player' :
       scores.player < scores.opponent ? 'opponent' : 'tie';
     setWinner(winner);
+
+    // Only the host should send the game result
+    if (isHost) {
+      NakamaService.endGame({
+        playerScore: scores.player,
+        opponentScore: scores.opponent,
+        winner: winner
+      });
+    }
   };
 
   if (isLoading) {
@@ -315,8 +411,7 @@ const QuizScreen = () => {
     );
   }
 
-  // const currentQuestion = questions[currentQuestionIndex];
-  console.log("Current question:", currentQuestion);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>

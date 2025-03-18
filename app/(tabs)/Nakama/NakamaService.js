@@ -21,6 +21,8 @@ class NakamaService {
     this.token = null;
     this.userId = null;
     this.opponentId = null;
+    this.isHost = false;
+    this.hostUserId = null;
   }
 
   // src/services/NakamaService.js - Updated authenticate method
@@ -86,6 +88,15 @@ class NakamaService {
             return;
           }
 
+          const sortedUsers = matched.users.sort((a, b) => 
+            a.presence.session_id.localeCompare(b.presence.session_id)
+          );
+          const hostUser = sortedUsers[0];
+          this.hostUserId = hostUser.presence.user_id;
+          this.isHost = (this.userId === this.hostUserId);
+          
+          console.log("Host determined:", this.isHost ? "I am the host" : "I am not the host");
+
           // Join the match with the correct parameter
           this.socket
             .joinMatch(null, this.token)
@@ -149,6 +160,28 @@ class NakamaService {
     }
   }
 
+  handleHostChange(match) {
+    if (!match.presences || match.presences.length === 0) return;
+    
+    // Sort presences by session ID
+    const sortedPresences = [...match.presences].sort((a, b) => 
+      a.session_id.localeCompare(b.session_id)
+    );
+    
+    // The first presence is the host
+    const newHostUserId = sortedPresences[0].user_id;
+    const hostChanged = this.hostUserId !== newHostUserId;
+    
+    this.hostUserId = newHostUserId;
+    this.isHost = (this.userId === this.hostUserId);
+    
+    if (hostChanged) {
+      console.log("Host changed:", this.isHost ? "I am now the host" : "I am not the host");
+      return true;
+    }
+    return false;
+  }
+
   listenForMatchUpdates(callbacks) {
     if (!this.socket) {
       console.error("Socket not connected");
@@ -158,24 +191,29 @@ class NakamaService {
     this.socket.onmatchdata = (matchData) => {
       if (matchData.match_id !== this.matchId) return;
 
-      const data = JSON.parse(new TextDecoder().decode(matchData.data));
+      try {
+        const data = JSON.parse(new TextDecoder().decode(matchData.data));
+        console.log("Received match data:", matchData.op_code, data);
 
-      switch (matchData.op_code) {
-        case 1: // Answer received
-          if (callbacks.onAnswerReceived) {
-            callbacks.onAnswerReceived(matchData.presence.user_id, data);
-          }
-          break;
-        case 2: // Next question
-          if (callbacks.onNextQuestion) {
-            callbacks.onNextQuestion(data);
-          }
-          break;
-        case 3: // Game result
-          if (callbacks.onGameResult) {
-            callbacks.onGameResult(data);
-          }
-          break;
+        switch (matchData.op_code) {
+          case 1: // Answer received
+            if (callbacks.onAnswerReceived) {
+              callbacks.onAnswerReceived(matchData.presence.user_id, data);
+            }
+            break;
+          case 2: // Next question
+            if (callbacks.onNextQuestion) {
+              callbacks.onNextQuestion(data);
+            }
+            break;
+          case 3: // Game result
+            if (callbacks.onGameResult) {
+              callbacks.onGameResult(data);
+            }
+            break;
+        }
+      } catch (error) {
+        console.error("Error parsing match data:", error);
       }
     };
 
@@ -183,6 +221,23 @@ class NakamaService {
       if (presenceEvent.match_id !== this.matchId) return;
 
       if (presenceEvent.leaves && presenceEvent.leaves.length > 0) {
+        // Check if the host left
+        const hostLeft = presenceEvent.leaves.some(presence => 
+          presence.user_id === this.hostUserId
+        );
+        
+        if (hostLeft) {
+          // We need to recalculate the host
+          this.socket.getMatch(this.matchId)
+            .then(match => {
+              const hostChanged = this.handleHostChange(match);
+              if (hostChanged && callbacks.onHostChanged) {
+                callbacks.onHostChanged(this.isHost);
+              }
+            })
+            .catch(error => console.error("Error getting match:", error));
+        }
+        
         if (callbacks.onPlayerLeft) {
           callbacks.onPlayerLeft(presenceEvent.leaves);
         }
@@ -195,6 +250,53 @@ class NakamaService {
       }
     };
   }
+
+  // listenForMatchUpdates(callbacks) {
+  //   if (!this.socket) {
+  //     console.error("Socket not connected");
+  //     return;
+  //   }
+
+  //   this.socket.onmatchdata = (matchData) => {
+  //     if (matchData.match_id !== this.matchId) return;
+
+  //     const data = JSON.parse(new TextDecoder().decode(matchData.data));
+
+  //     switch (matchData.op_code) {
+  //       case 1: // Answer received
+  //         if (callbacks.onAnswerReceived) {
+  //           callbacks.onAnswerReceived(matchData.presence.user_id, data);
+  //         }
+  //         break;
+  //       case 2: // Next question
+  //         if (callbacks.onNextQuestion) {
+  //           callbacks.onNextQuestion(data);
+  //         }
+  //         break;
+  //       case 3: // Game result
+  //         if (callbacks.onGameResult) {
+  //           callbacks.onGameResult(data);
+  //         }
+  //         break;
+  //     }
+  //   };
+
+  //   this.socket.onmatchpresence = (presenceEvent) => {
+  //     if (presenceEvent.match_id !== this.matchId) return;
+
+  //     if (presenceEvent.leaves && presenceEvent.leaves.length > 0) {
+  //       if (callbacks.onPlayerLeft) {
+  //         callbacks.onPlayerLeft(presenceEvent.leaves);
+  //       }
+  //     }
+
+  //     if (presenceEvent.joins && presenceEvent.joins.length > 0) {
+  //       if (callbacks.onPlayerJoined) {
+  //         callbacks.onPlayerJoined(presenceEvent.joins);
+  //       }
+  //     }
+  //   };
+  // }
 
   async leaveMatch() {
     if (this.socket && this.matchId) {
@@ -219,24 +321,41 @@ class NakamaService {
     this.session = null;
   }
 
-  async forceNextQuestion(nextQuestionIndex) {
+  async forceNextQuestion(nextQuestionData) {
     if (!this.matchId) {
       console.error("No active match");
       return false;
     }
+  
     try {
-      console.log("OP code: ", op_code)
-      await this.socket.sendMatchState({
-        matchId: this.matchId,
-        opCode: op_code.NEXT_QUESTION,
-        data: {
-          questionIndex: nextQuestionIndex,
-        },
-      });
+      await this.socket.sendMatchState(
+        this.matchId,
+        2, // Op code for next question
+        JSON.stringify(nextQuestionData)
+      );
     } catch (error) {
       console.error("Error forcing next question:", error);
     }
   }
+
+  async endGame(finalScores) {
+    if (!this.matchId || !this.isHost) {
+      return false;
+    }
+    
+    try {
+      await this.socket.sendMatchState(
+        this.matchId,
+        3, // Op code for game result
+        JSON.stringify(finalScores)
+      );
+      return true;
+    } catch (error) {
+      console.error("Error ending game:", error);
+      return false;
+    }
+  }
+
 }
 
 export default new NakamaService();
