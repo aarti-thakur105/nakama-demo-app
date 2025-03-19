@@ -135,7 +135,14 @@ class NakamaService {
     }
   }
 
-  async sendAnswer(questionId, answerId, timeSpent) {
+  async userId(){
+    return this.userId;
+  }
+
+  async opponentId(){
+    return this.opponentId;
+  }
+  async sendAnswer(questionId, answerId, timeSpent, playerScore) {
     try {
       if (!this.matchId) {
         throw new Error("No active match");
@@ -145,6 +152,7 @@ class NakamaService {
         questionId,
         answerId,
         timeSpent,
+        playerScore
       };
 
       await this.socket.sendMatchState(

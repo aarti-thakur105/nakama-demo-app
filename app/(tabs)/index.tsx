@@ -71,6 +71,7 @@ const HomeScreen = () => {
       
       // Navigate to quiz screen when match is found
       navigation.navigate('Quiz', {
+        match: match,
         matchId: match.match_id,
         subject,
         ageGroup,
