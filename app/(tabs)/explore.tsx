@@ -1,4 +1,3 @@
-// // src/screens/QuizScreen.js
 // import React, { useState, useEffect, useRef } from 'react';
 // import {
 //   View,
@@ -38,6 +37,11 @@
 //   const timerInterval = useRef(null);
 //   const [isHost1, setIsHost1] = useState(false);
 
+//   // Add refs to track current scores reliably
+//   const playerScoreRef = useRef(0);
+//   const opponentScoreRef = useRef(0);
+//   const questionIndexRef = useRef(0); // Store the latest index
+
 //   const questions = [
 //     {
 //       id: 1,
@@ -76,25 +80,21 @@
 //     }
 //   ]
 
+  
 //   const currentQuestion = questions[currentQuestionIndex];
-//   console.log("Current Index: ", currentQuestionIndex);
 //   const isHost = NakamaService.isHost;
-//   const questionIndexRef = useRef(0); // Store the latest index
 
 //   useEffect(() => {
 //     questionIndexRef.current = currentQuestionIndex;
 //   }, [currentQuestionIndex]);
 
+//   // Update score refs when scores state changes
 //   useEffect(() => {
-//     // if (QUESTIONS[subject] && QUESTIONS[subject][ageGroup]) {
-//     //   console.log("true")
-//     //   setQuestions(QUESTIONS[subject][ageGroup]);
-//     // } else {
-//     //   console.log("false")
-//     //   // Fallback to default questions if specific subject/age not found
-//     //   setQuestions(QUESTIONS.math.teen);
-//     // }
-//     // Initialize game
+//     playerScoreRef.current = scores.player;
+//     opponentScoreRef.current = scores.opponent;
+//   }, [scores]);
+
+//   useEffect(() => {
 //     initializeGame();
 
 //     return () => {
@@ -138,13 +138,13 @@
 
 //   const startTimer = () => {
 //     // Reset timer
-//     setTimeRemaining(30);
+//     setTimeRemaining(10);
 //     timerAnimation.setValue(1);
 
 //     // Animate timer
 //     Animated.timing(timerAnimation, {
 //       toValue: 0,
-//       duration: 30000,
+//       duration: 10000,
 //       useNativeDriver: false
 //     }).start();
 
@@ -181,27 +181,15 @@
 //       return updatedAnswersOfOpponents;
 //     });
 
+//     // Update opponent score in both state and ref
 //     setScores((prev) => {
-//       const updatedScores = { ...prev, opponent: data.playerScore }; // Ensure opponent's score updates
-//       console.log("Updated scores:", updatedScores);
+//       const updatedScores = { ...prev, opponent: data.playerScore };
+//       opponentScoreRef.current = data.playerScore; // Update the ref immediately
 //       return updatedScores;
 //     });
-
-//     // Check if both players have answered
-//     // checkBothAnswered(data.questionId);
 //   };
 
-//   // const handleNextQuestion = (data) => {
-//   //   console.log("Next question data: ", data)
-//   //   setCurrentQuestionIndex(data.questionIndex);
-//   //   setSelectedAnswer(null);
-//   //   setWaitingForOpponent(false);
-//   //   setShowResult(false);
-//   //   startTimer();
-//   // };
-
 //   const handleNextQuestion = (data) => {
-//     console.log("Next question data: ", data)
 //     setCurrentQuestionIndex(data.questionIndex);
 //     setSelectedAnswer(null);
 //     setWaitingForOpponent(false);
@@ -218,17 +206,49 @@
 //       };
 //       return updatedQuestions;
 //     });
-
 //   };
+
+//   // const handleGameResult = (data) => {
+//   //   setGameOver(true);
+//   //   setWinner(data.winner);
+
+//   //   // Update final scores in both state and refs
+//   //   setScores({
+//   //     player: data.playerScore,
+//   //     opponent: data.opponentScore
+//   //   });
+
+//   //   playerScoreRef.current = data.playerScore;
+//   //   opponentScoreRef.current = data.opponentScore;
+//   // };
+
 //   const handleGameResult = (data) => {
 //     setGameOver(true);
-//     setWinner(data.winner);
 
-//     // Update final scores
+//     const playerUserId = NakamaService.userId;
+//     const opponentUserId = NakamaService.opponentId;
+
+
 //     setScores({
 //       player: data.playerScore,
-//       opponent: data.opponentScore
+//       opponent: data.opponentScore,
 //     });
+
+//     playerScoreRef.current = data.playerScore;
+//     opponentScoreRef.current = data.opponentScore;
+
+//     // Determine winner based on received data
+//     let winner;
+//     if (data.winnerUserId === playerUserId) {
+//       winner = playerUserId;
+//     } else if (data.winnerUserId === 'tie') {
+//       winner = 'tie';
+//     } 
+//     // else {
+//     //   winner = 'tie';
+//     // }
+
+//     setWinner(winner);
 //   };
 
 //   const handlePlayerLeft = (players) => {
@@ -240,8 +260,6 @@
 //   const submitAnswer = async (answerId) => {
 //     if (waitingForOpponent || showResult) return;
 
-//     // clearInterval(timerInterval.current);
-
 //     const currentQuestion = questions[currentQuestionIndex];
 //     let updatedAnswersOfPlayer;
 //     // Store player's answer
@@ -252,13 +270,14 @@
 //     });
 
 //     // Update score if correct
-//     let newScore = scores.player;
+//     let newScore = playerScoreRef.current; // Use ref for current score
 //     if (answerId === currentQuestion.correctAnswer) {
 //       newScore += 1; // Increment score if correct
+//       playerScoreRef.current = newScore; // Update ref immediately
 //       setScores((prev) => ({ ...prev, player: newScore }));
 //     }
 
-//     // Send answer to opponent
+//     // Send answer to opponent - using ref value ensures we send the latest score
 //     await NakamaService.sendAnswer(
 //       currentQuestion.id,
 //       answerId,
@@ -266,16 +285,6 @@
 //       newScore
 //     );
 //     setWaitingForOpponent(true);
-
-//     // Check if opponent has already answered
-//     // checkBothAnswered(currentQuestion.id);
-//   };
-
-
-//   const checkBothAnswered = (questionId) => {
-//     if (playerAnswers[questionId] !== undefined && opponentAnswers[questionId] !== undefined) {
-//       showQuestionResult();
-//     }
 //   };
 
 //   const showQuestionResult = () => {
@@ -289,101 +298,73 @@
 //     }
 //   };
 
-//   // const showQuestionResult = () => {
-//   //   setWaitingForOpponent(false);
-//   //   setShowResult(true);
+//   const moveToNextQuestion = () => {
 
-//   //   // Only have one player (e.g., the host) progress to the next question
-//   //   // This avoids race conditions with both players sending "next question" events
-//   //   if (isHost) { // You need to add a way to determine who's the host
-//   //     setTimeout(() => {
-//   //       moveToNextQuestion();
-//   //     }, 3000);
-//   //   }
-//   // };
+//     if (!isHost) {
+//       return;
+//     }
 
-//   // const moveToNextQuestion = () => {
-//   //   console.log("moveToNextQuestion called");
-//   //   if (currentQuestionIndex < questions.length - 1) {
-//   //     const nextIndex = currentQuestionIndex + 1;
+//     if (questionIndexRef.current < questions.length - 1) {
+//       const nextIndex = questionIndexRef.current + 1;
+//       const nextQuestion = questions[nextIndex];
 
-//   //     // Send the next question event to all players
-//   //     NakamaService.forceNextQuestion(nextIndex);
+//       // Send the updated question index to all players
+//       NakamaService.forceNextQuestion({
+//         questionIndex: nextIndex,
+//         question: nextQuestion.question,
+//         options: nextQuestion.options,
+//         correctAnswer: nextQuestion.correctAnswer,
+//         timeLimit: nextQuestion.timeLimit,
+//       });
 
-//   //     // Note: You shouldn't update local state here if you want server-driven updates
-//   //     // The state should update when handleNextQuestion is called
-//   //   } else {
-//   //     // Game over
-//   //     endGame();
-//   //   }
-//   // };
+//       // Update both state and ref
+//       setCurrentQuestionIndex(prevIndex => {
+//         const newIndex = prevIndex + 1;
+//         questionIndexRef.current = newIndex; // Update ref with latest value
+//         return newIndex;
+//       });
 
-//  const moveToNextQuestion = () => {
-//   console.log("Moving to next question. Stored index:", questionIndexRef.current);
-
-//   if (!isHost) {
-//     return;
-//   }
-
-//   if (questionIndexRef.current < questions.length - 1) {
-//     const nextIndex = questionIndexRef.current + 1;
-//     console.log("Sending next question index:", nextIndex);
-//     const nextQuestion = questions[nextIndex];
-
-//     // Send the updated question index to all players
-//     NakamaService.forceNextQuestion({
-//       questionIndex: nextIndex,
-//       question: nextQuestion.question,
-//       options: nextQuestion.options,
-//       correctAnswer: nextQuestion.correctAnswer,
-//       timeLimit: nextQuestion.timeLimit,
-//     });
-
-//     // Update both state and ref
-//     setCurrentQuestionIndex(prevIndex => {
-//       const newIndex = prevIndex + 1;
-//       questionIndexRef.current = newIndex; // Update ref with latest value
-//       return newIndex;
-//     });
-
-//     setSelectedAnswer(null);
-//     setShowResult(false);
-//     startTimer();
-//   } else {
-//     console.log("End of questions. Ending game.");
-//     endGame();
-//   }
-// };
-
-
+//       setSelectedAnswer(null);
+//       setShowResult(false);
+//       startTimer();
+//     } else {
+//       endGame();
+//     }
+//   };
 
 //   const endGame = () => {
 //     setGameOver(true);
 
-//     // Determine winner
-//     // const winner = scores.player > scores.opponent ? 'player' :
-//     //   scores.player < scores.opponent ? 'opponent' : 'tie';
-//     if (scores.player > scores.opponent) {
-//       setWinner('player');
-//     } else if (scores.player < scores.opponent) {
-//       setWinner('opponent');
-//     } else if (scores.player === scores.opponent) {
-//       setWinner('tie');
-//     }
-//     else{
-//       setWinner('Undefined');
-//     }
+//     const playerCurrentScore = playerScoreRef.current;
+//     const opponentCurrentScore = opponentScoreRef.current;
 
-//     console.log("All screoes: ", scores);
-//     console.log("Winner: ", winner);
-//     console.log("Player score: ", scores.player);
-//     console.log("Opponent score: ", scores.opponent);
-//     // Only the host should send the game result
+//     const playerUserId = NakamaService.userId; // Get player's user ID
+//     const opponentUserId = NakamaService.opponentId; // Get opponent's user ID
+
+//     console.log("Player score: ", playerCurrentScore);
+//     console.log("Opponent score: ", opponentCurrentScore);
+//     console.log("Player ID: ", playerUserId);
+//     console.log("Opponent ID: ", opponentUserId);
+
+//     let winnerUserId;
+//     if (playerCurrentScore > opponentCurrentScore) {
+//       winnerUserId = playerUserId;
+//     } else if (playerCurrentScore === opponentCurrentScore) {
+//       winnerUserId = 'tie';
+//     } 
+//     // else {
+//     //   winnerUserId = 'tie';
+//     // }
+
+//     setWinner(winnerUserId);
+//     console.log("winner ID: ", winnerUserId);
 //     if (isHost) {
 //       NakamaService.endGame({
-//         playerScore: scores.player,
-//         opponentScore: scores.opponent,
-//         winner: winner
+//         playerScore: opponentCurrentScore,
+//         opponentScore: playerCurrentScore,
+//         playerUserId: playerUserId,
+//         opponentUserId: opponentUserId,
+//         winnerUserId: winnerUserId,
 //       });
 //     }
 //   };
@@ -398,10 +379,13 @@
 //   }
 
 //   if (gameOver) {
-//     console.log("scores here: ", scores);
-//     console.log("Player score1: ", scores.player);
-//     console.log("Opponent score1: ", scores.opponent);
-//     console.log("winner: ", winner)
+//     const playerUserId = NakamaService.userId;
+//     const winnerId = winner; // Get opponent's user ID
+//     // const opponentUserId = NakamaService.opponentId; // Get opponent's user ID
+
+//     console.log("Player ID: ", playerUserId);
+//     console.log("Winner ID: ", winnerId);
+//     // console.log("Opponent ID: ", opponentUserId);
 //     return (
 //       <View style={styles.container}>
 //         <Text style={styles.gameOverTitle}>Game Over!</Text>
@@ -412,13 +396,10 @@
 //           <Text style={styles.scoreValue}>Opponent: {scores.opponent}</Text>
 //         </View>
 
-//         <Text style={[styles.winnerText,
-//         winner === 'player' ? styles.winnerTextWin :
-//           winner === 'opponent' ? styles.winnerTextLose :
-//             styles.winnerTextTie]}>
-//           {winner === 'player' ? 'You Won!' :
-//             winner === 'opponent' ? 'You Lost!' : 'It\'s a Tie!'}
+//         <Text style={[styles.winnerText, scores.player === scores.opponent ? styles.winnerTextTie : scores.player > scores.opponent ? styles.winnerTextWin : styles.winnerTextLose]}>
+//           {scores.player > scores.opponent ? 'You Won!' : scores.player === scores.opponent ? 'It\'s a Tie!' : 'You Lost!'}
 //         </Text>
+
 
 //         <TouchableOpacity
 //           style={styles.playAgainButton}
@@ -429,7 +410,6 @@
 //       </View>
 //     );
 //   }
-
 
 //   return (
 //     <View style={styles.container}>
@@ -710,7 +690,6 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import NakamaService from './Nakama/NakamaService';
-import { QUESTIONS } from './Nakama/nakamaConfig';
 
 const QuizScreen = () => {
   const navigation = useNavigation();
@@ -742,44 +721,105 @@ const QuizScreen = () => {
   const opponentScoreRef = useRef(0);
   const questionIndexRef = useRef(0); // Store the latest index
 
-  const questions = [
-    {
-      id: 1,
-      question: "What is the value of π (pi) to two decimal places?",
-      options: ["3.10", "3.14", "3.16", "3.18"],
-      correctAnswer: 1, // Index of correct answer (0-based)
-      timeLimit: 30 // seconds
+  const questions = [ 
+    { 
+      id: 1, 
+      questionStem: "A watermelon weighs 5 kilograms. A pumpkin weighs 3 kilograms. What is the total weight of both fruits?", 
+      options: { A: "8 kilograms", B: "6 kilograms", C: "10 kilograms", D: "7 kilograms" }, 
+      Answer: "8 kilograms", 
+      subject: "Maths", 
+      topic: "Weight of objects", 
+      subtopic: "NA", 
+      ageCohort: 1, 
+      bloomsTag: "NA", 
+      difficultyTag: "NA", 
+      eolDescription: "NA", 
+      medium: "English", 
+      nodeDescription: "NA", 
+      nodeId: "NA", 
+      qImage: "", 
+      qVideoUrl: "", 
+      timeLimit: 20 
     },
-    {
-      id: 2,
-      question: "What is the square root of 144?",
-      options: ["10", "12", "14", "16"],
-      correctAnswer: 1,
-      timeLimit: 30
+    { 
+      id: 2, 
+      questionStem: "A book has 120 pages. If Rohan reads 30 pages every day, how many days will he take to finish the book?", 
+      options: { A: "2 days", B: "4 days", C: "5 days", D: "6 days" }, 
+      Answer: "4 days", 
+      subject: "Maths", 
+      topic: "Time and Reading", 
+      subtopic: "NA", 
+      ageCohort: 1, 
+      bloomsTag: "NA", 
+      difficultyTag: "NA", 
+      eolDescription: "NA", 
+      medium: "English", 
+      nodeDescription: "NA", 
+      nodeId: "NA", 
+      qImage: "", 
+      qVideoUrl: "", 
+      timeLimit: 20 
     },
-    {
-      id: 3,
-      question: "If x + 2y = 10 and x - y = 1, what is the value of y?",
-      options: ["2", "3", "4", "5"],
-      correctAnswer: 1,
-      timeLimit: 30
+    { 
+      id: 3, 
+      questionStem: "Reena bought 3 apples and 2 oranges. If each apple costs 5 rupees and each orange costs 3 rupees, what is the total cost?", 
+      options: { A: "19 rupees", B: "21 rupees", C: "23 rupees", D: "25 rupees" }, 
+      Answer: "21 rupees", 
+      subject: "Maths", 
+      topic: "Money and Cost", 
+      subtopic: "NA", 
+      ageCohort: 1, 
+      bloomsTag: "NA", 
+      difficultyTag: "NA", 
+      eolDescription: "NA", 
+      medium: "English", 
+      nodeDescription: "NA", 
+      nodeId: "NA", 
+      qImage: "", 
+      qVideoUrl: "", 
+      timeLimit: 20 
     },
-    {
-      id: 4,
-      question: "What is the sum of the angles in a triangle?",
-      options: ["90°", "180°", "270°", "360°"],
-      correctAnswer: 1,
-      timeLimit: 30
+    { 
+      id: 4, 
+      questionStem: "A rope is 15 meters long. If it is cut into 3 equal pieces, how long is each piece?", 
+      options: { A: "3 meters", B: "5 meters", C: "6 meters", D: "7 meters" }, 
+      Answer: "5 meters", 
+      subject: "Maths", 
+      topic: "Division and Measurement", 
+      subtopic: "NA", 
+      ageCohort: 1, 
+      bloomsTag: "NA", 
+      difficultyTag: "NA", 
+      eolDescription: "NA", 
+      medium: "English", 
+      nodeDescription: "NA", 
+      nodeId: "NA", 
+      qImage: "", 
+      qVideoUrl: "", 
+      timeLimit: 20 
     },
-    {
-      id: 5,
-      question: "What is 25% of 80?",
-      options: ["15", "20", "25", "30"],
-      correctAnswer: 1,
-      timeLimit: 30
+    { 
+      id: 5, 
+      questionStem: "A car travels 60 kilometers in 2 hours. What is its speed per hour?", 
+      options: { A: "20 km/h", B: "30 km/h", C: "40 km/h", D: "50 km/h" }, 
+      Answer: "30 km/h", 
+      subject: "Maths", 
+      topic: "Speed and Distance", 
+      subtopic: "NA", 
+      ageCohort: 1, 
+      bloomsTag: "NA", 
+      difficultyTag: "NA", 
+      eolDescription: "NA", 
+      medium: "English", 
+      nodeDescription: "NA", 
+      nodeId: "NA", 
+      qImage: "", 
+      qVideoUrl: "", 
+      timeLimit: 20 
     }
-  ]
+  ];
 
+  
   const currentQuestion = questions[currentQuestionIndex];
   const isHost = NakamaService.isHost;
 
@@ -794,15 +834,6 @@ const QuizScreen = () => {
   }, [scores]);
 
   useEffect(() => {
-    // if (QUESTIONS[subject] && QUESTIONS[subject][ageGroup]) {
-    //   console.log("true")
-    //   setQuestions(QUESTIONS[subject][ageGroup]);
-    // } else {
-    //   console.log("false")
-    //   // Fallback to default questions if specific subject/age not found
-    //   setQuestions(QUESTIONS.math.teen);
-    // }
-    // Initialize game
     initializeGame();
 
     return () => {
@@ -845,14 +876,17 @@ const QuizScreen = () => {
   };
 
   const startTimer = () => {
+    // Get the time limit from the current question or use a default value
+    const timeLimit = currentQuestion.timeLimit || 20;
+    
     // Reset timer
-    setTimeRemaining(10);
+    setTimeRemaining(timeLimit);
     timerAnimation.setValue(1);
 
     // Animate timer
     Animated.timing(timerAnimation, {
       toValue: 0,
-      duration: 10000,
+      duration: timeLimit * 1000,
       useNativeDriver: false
     }).start();
 
@@ -907,35 +941,20 @@ const QuizScreen = () => {
     setQuestions((prev) => {
       const updatedQuestions = [...prev];
       updatedQuestions[data.questionIndex] = {
-        question: data.question,
+        questionStem: data.question, // Map "question" to "questionStem" for the new format
         options: data.options,
-        correctAnswer: data.correctAnswer,
+        Answer: data.correctAnswer, // Map "correctAnswer" to "Answer" for the new format
         timeLimit: data.timeLimit,
       };
       return updatedQuestions;
     });
   };
 
-  // const handleGameResult = (data) => {
-  //   setGameOver(true);
-  //   setWinner(data.winner);
-
-  //   // Update final scores in both state and refs
-  //   setScores({
-  //     player: data.playerScore,
-  //     opponent: data.opponentScore
-  //   });
-
-  //   playerScoreRef.current = data.playerScore;
-  //   opponentScoreRef.current = data.opponentScore;
-  // };
-
   const handleGameResult = (data) => {
     setGameOver(true);
 
     const playerUserId = NakamaService.userId;
     const opponentUserId = NakamaService.opponentId;
-
 
     setScores({
       player: data.playerScore,
@@ -952,9 +971,6 @@ const QuizScreen = () => {
     } else if (data.winnerUserId === 'tie') {
       winner = 'tie';
     } 
-    // else {
-    //   winner = 'tie';
-    // }
 
     setWinner(winner);
   };
@@ -965,21 +981,30 @@ const QuizScreen = () => {
     setWinner('player'); // Default win if opponent leaves
   };
 
-  const submitAnswer = async (answerId) => {
+  // Helper function to find option key (A, B, C, D) by value
+  const getOptionKeyByValue = (options, value) => {
+    const entry = Object.entries(options).find(([key, val]) => val === value);
+    return entry ? entry[0] : null;
+  };
+
+  const submitAnswer = async (optionKey) => {
     if (waitingForOpponent || showResult) return;
 
     const currentQuestion = questions[currentQuestionIndex];
     let updatedAnswersOfPlayer;
-    // Store player's answer
-    setSelectedAnswer(answerId);
+    
+    // Store player's answer (now storing option key like "A", "B", etc.)
+    setSelectedAnswer(optionKey);
     setPlayerAnswers(prev => {
-      updatedAnswersOfPlayer = { ...prev, [currentQuestion.id]: answerId };
+      updatedAnswersOfPlayer = { ...prev, [currentQuestion.id]: optionKey };
       return updatedAnswersOfPlayer;
     });
 
-    // Update score if correct
-    let newScore = playerScoreRef.current; // Use ref for current score
-    if (answerId === currentQuestion.correctAnswer) {
+    // Update score if correct - compare option value with Answer
+    const selectedOptionValue = currentQuestion.options[optionKey];
+    let newScore = playerScoreRef.current;
+    
+    if (selectedOptionValue === currentQuestion.Answer) {
       newScore += 1; // Increment score if correct
       playerScoreRef.current = newScore; // Update ref immediately
       setScores((prev) => ({ ...prev, player: newScore }));
@@ -988,8 +1013,8 @@ const QuizScreen = () => {
     // Send answer to opponent - using ref value ensures we send the latest score
     await NakamaService.sendAnswer(
       currentQuestion.id,
-      answerId,
-      30 - timeRemaining,
+      optionKey, // Now sending option key (A, B, C, D) instead of index
+      currentQuestion.timeLimit - timeRemaining,
       newScore
     );
     setWaitingForOpponent(true);
@@ -1007,7 +1032,6 @@ const QuizScreen = () => {
   };
 
   const moveToNextQuestion = () => {
-
     if (!isHost) {
       return;
     }
@@ -1019,9 +1043,9 @@ const QuizScreen = () => {
       // Send the updated question index to all players
       NakamaService.forceNextQuestion({
         questionIndex: nextIndex,
-        question: nextQuestion.question,
+        question: nextQuestion.questionStem, // Use questionStem instead of question
         options: nextQuestion.options,
-        correctAnswer: nextQuestion.correctAnswer,
+        correctAnswer: nextQuestion.Answer, // Use Answer instead of correctAnswer
         timeLimit: nextQuestion.timeLimit,
       });
 
@@ -1039,41 +1063,6 @@ const QuizScreen = () => {
       endGame();
     }
   };
-
-  // const endGame = () => {
-  //   setGameOver(true);
-
-  //   // Use refs instead of state for reliable values
-  //   const playerCurrentScore = playerScoreRef.current;
-  //   const opponentCurrentScore = opponentScoreRef.current;
-
-  //   console.log("All scores from refs: ", { player: playerCurrentScore, opponent: opponentCurrentScore });
-
-  //   // Determine winner using ref values
-  //   let currentWinner;
-  //   if (playerCurrentScore > opponentCurrentScore) {
-  //     currentWinner = 'player';
-  //   } else if (playerCurrentScore < opponentCurrentScore) {
-  //     currentWinner = 'opponent';
-  //   } else {
-  //     currentWinner = 'tie';
-  //   }
-
-  //   setWinner(currentWinner);
-
-  //   console.log("Winner determined: ", currentWinner);
-  //   console.log("Player score from ref: ", playerCurrentScore);
-  //   console.log("Opponent score from ref: ", opponentCurrentScore);
-
-  //   // Only the host should send the game result
-  //   if (isHost) {
-  //     NakamaService.endGame({
-  //       playerScore: playerCurrentScore,
-  //       opponentScore: opponentCurrentScore,
-  //       winner: currentWinner
-  //     });
-  //   }
-  // };
 
   const endGame = () => {
     setGameOver(true);
@@ -1095,9 +1084,6 @@ const QuizScreen = () => {
     } else if (playerCurrentScore === opponentCurrentScore) {
       winnerUserId = 'tie';
     } 
-    // else {
-    //   winnerUserId = 'tie';
-    // }
 
     setWinner(winnerUserId);
     console.log("winner ID: ", winnerUserId);
@@ -1121,47 +1107,13 @@ const QuizScreen = () => {
     );
   }
 
-  // if (gameOver) {
-  //   console.log("scores here: ", scores);
-  //   console.log("Player score1: ", scores.player);
-  //   console.log("Opponent score1: ", scores.opponent);
-  //   console.log("winner: ", winner)
-  //   return (
-  //     <View style={styles.container}>
-  //       <Text style={styles.gameOverTitle}>Game Over!</Text>
-
-  //       <View style={styles.scoreContainer}>
-  //         <Text style={styles.scoreText}>Final Score</Text>
-  //         <Text style={styles.scoreValue}>You: {scores.player}</Text>
-  //         <Text style={styles.scoreValue}>Opponent: {scores.opponent}</Text>
-  //       </View>
-
-  //       <Text style={[styles.winnerText,
-  //       winner === 'player' ? styles.winnerTextWin :
-  //         winner === 'opponent' ? styles.winnerTextLose :
-  //           styles.winnerTextTie]}>
-  //         {winner === 'player' ? 'You Won!' :
-  //           winner === 'opponent' ? 'You Lost!' : 'It\'s a Tie!'}
-  //       </Text>
-
-  //       <TouchableOpacity
-  //         style={styles.playAgainButton}
-  //         onPress={() => navigation.navigate('Home')}
-  //       >
-  //         <Text style={styles.playAgainButtonText}>Play Again</Text>
-  //       </TouchableOpacity>
-  //     </View>
-  //   );
-  // }
-
   if (gameOver) {
     const playerUserId = NakamaService.userId;
     const winnerId = winner; // Get opponent's user ID
-    // const opponentUserId = NakamaService.opponentId; // Get opponent's user ID
 
     console.log("Player ID: ", playerUserId);
     console.log("Winner ID: ", winnerId);
-    // console.log("Opponent ID: ", opponentUserId);
+    
     return (
       <View style={styles.container}>
         <Text style={styles.gameOverTitle}>Game Over!</Text>
@@ -1172,19 +1124,9 @@ const QuizScreen = () => {
           <Text style={styles.scoreValue}>Opponent: {scores.opponent}</Text>
         </View>
 
-        {/* <Text style={[
-          styles.winnerText,
-          winner === playerUserId ? styles.winnerTextWin :
-            winner === 'tie' ? styles.winnerTextTie :
-              styles.winnerTextLose
-        ]}>
-          {winnerText}
-        </Text> */}
-
         <Text style={[styles.winnerText, scores.player === scores.opponent ? styles.winnerTextTie : scores.player > scores.opponent ? styles.winnerTextWin : styles.winnerTextLose]}>
           {scores.player > scores.opponent ? 'You Won!' : scores.player === scores.opponent ? 'It\'s a Tie!' : 'You Lost!'}
         </Text>
-
 
         <TouchableOpacity
           style={styles.playAgainButton}
@@ -1195,6 +1137,12 @@ const QuizScreen = () => {
       </View>
     );
   }
+
+  // Extract option keys (A, B, C, D) for rendering
+  const optionKeys = Object.keys(currentQuestion.options);
+  
+  // Find the correct answer key
+  const correctAnswerKey = getOptionKeyByValue(currentQuestion.options, currentQuestion.Answer);
 
   return (
     <View style={styles.container}>
@@ -1231,30 +1179,30 @@ const QuizScreen = () => {
       </View>
 
       <View style={styles.questionContainer}>
-        <Text style={styles.questionText}>{currentQuestion.question}</Text>
+        <Text style={styles.questionText}>{currentQuestion.questionStem}</Text>
       </View>
 
       <View style={styles.optionsContainer}>
-        {currentQuestion.options.map((option, index) => (
+        {optionKeys.map((optionKey) => (
           <TouchableOpacity
-            key={index}
+            key={optionKey}
             style={[
               styles.optionButton,
-              selectedAnswer === index && styles.selectedOption,
-              showResult && index === currentQuestion.correctAnswer && styles.correctOption,
-              showResult && selectedAnswer === index &&
-              selectedAnswer !== currentQuestion.correctAnswer && styles.incorrectOption
+              selectedAnswer === optionKey && styles.selectedOption,
+              showResult && optionKey === correctAnswerKey && styles.correctOption,
+              showResult && selectedAnswer === optionKey &&
+              selectedAnswer !== correctAnswerKey && styles.incorrectOption
             ]}
-            onPress={() => submitAnswer(index)}
+            onPress={() => submitAnswer(optionKey)}
             disabled={selectedAnswer !== null || waitingForOpponent || showResult}
           >
             <Text style={[
               styles.optionText,
-              showResult && index === currentQuestion.correctAnswer && styles.correctOptionText,
-              showResult && selectedAnswer === index &&
-              selectedAnswer !== currentQuestion.correctAnswer && styles.incorrectOptionText
+              showResult && optionKey === correctAnswerKey && styles.correctOptionText,
+              showResult && selectedAnswer === optionKey &&
+              selectedAnswer !== correctAnswerKey && styles.incorrectOptionText
             ]}>
-              {option}
+              {optionKey}: {currentQuestion.options[optionKey]}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1270,7 +1218,7 @@ const QuizScreen = () => {
       {showResult && (
         <View style={styles.resultContainer}>
           <Text style={styles.resultText}>
-            {selectedAnswer === currentQuestion.correctAnswer ?
+            {selectedAnswer === correctAnswerKey ?
               '✓ Correct!' : '✗ Incorrect!'}
           </Text>
         </View>

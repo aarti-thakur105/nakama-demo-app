@@ -65,6 +65,7 @@ class NakamaService {
       const maxSize = 2;
       const stringProperties = {
         subject: subject,
+        ageGroup: ageGroup
       };
 
       // Add player to matchmaking pool
