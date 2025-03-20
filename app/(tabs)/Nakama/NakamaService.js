@@ -34,9 +34,7 @@ class NakamaService {
 
       if (!deviceId) {
         // Generate a new device ID if one doesn't exist
-        deviceId =
-          Math.random().toString(36).substring(2, 15) +
-          Math.random().toString(36).substring(2, 15);
+        deviceId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
         localStorage.setItem("nakamaDeviceId", deviceId);
       }
 
